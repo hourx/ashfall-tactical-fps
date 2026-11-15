@@ -6,7 +6,9 @@ const STEEL = new THREE.MeshStandardMaterial({ color: '#4e5a62', roughness: 0.48
 const POLYMER = new THREE.MeshStandardMaterial({ color: '#4a4137', roughness: 0.84, metalness: 0.1 });
 const ACCENT = new THREE.MeshStandardMaterial({ color: '#8f4f2e', roughness: 0.7, metalness: 0.2 });
 const BRASS = new THREE.MeshStandardMaterial({ color: '#a58344', roughness: 0.45, metalness: 0.6 });
-const GLOVE = new THREE.MeshStandardMaterial({ color: '#2f2a24', roughness: 0.95, metalness: 0.02 });
+const GLOVE = new THREE.MeshStandardMaterial({ color: '#1e2328', roughness: 0.86, metalness: 0.05 });
+const CUFF = new THREE.MeshStandardMaterial({ color: '#8d7a5c', roughness: 0.8, metalness: 0.08 });
+const SLEEVE = new THREE.MeshStandardMaterial({ color: '#3f4a52', roughness: 0.9, metalness: 0.04 });
 
 function box(w, h, d, material, x, y, z, rx = 0, ry = 0) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
@@ -30,11 +32,23 @@ function buildRifle() {
   group.add(box(0.03, 0.026, 0.02, BRASS, 0, 0.085, -0.235));
   group.add(box(0.02, 0.02, 0.06, STEEL, 0.045, 0.03, -0.2));
 
-  // Hands: right on the grip, left under the handguard.
-  group.add(box(0.075, 0.09, 0.11, GLOVE, 0.01, -0.12, -0.02, 0.2));
-  group.add(box(0.05, 0.05, 0.06, GLOVE, 0.045, -0.09, -0.06));
-  group.add(box(0.085, 0.06, 0.1, GLOVE, -0.005, -0.045, -0.47));
-  group.add(box(0.03, 0.045, 0.09, GLOVE, 0.045, -0.02, -0.44));
+  // Hands: right on the grip, left under the handguard. Sized and coloured to read at
+  // viewmodel distance: a dark glove alone vanished against the receiver, so each hand
+  // carries a lighter glove body, a cuff and a sleeve in the loadout's rust accent.
+  // Right hand: wraps the grip, knuckles forward.
+  group.add(box(0.088, 0.105, 0.13, GLOVE, 0.012, -0.125, -0.02, 0.2));
+  group.add(box(0.062, 0.062, 0.075, GLOVE, 0.05, -0.095, -0.062));
+  group.add(box(0.075, 0.05, 0.09, GLOVE, 0.012, -0.155, 0.035, 0.1));
+  // Right cuff and sleeve running back out of frame.
+  group.add(box(0.085, 0.075, 0.055, CUFF, 0.014, -0.14, 0.075));
+  group.add(box(0.095, 0.085, 0.16, SLEEVE, 0.02, -0.155, 0.17, 0.06));
+  // Left hand: supports the handguard from below.
+  group.add(box(0.095, 0.072, 0.115, GLOVE, -0.008, -0.05, -0.47));
+  group.add(box(0.038, 0.052, 0.1, GLOVE, 0.048, -0.025, -0.44));
+  group.add(box(0.04, 0.05, 0.085, GLOVE, -0.052, -0.03, -0.46));
+  // Left cuff and sleeve running back and down out of frame.
+  group.add(box(0.092, 0.07, 0.06, CUFF, -0.012, -0.045, -0.395));
+  group.add(box(0.1, 0.082, 0.18, SLEEVE, -0.03, -0.06, -0.28, -0.05));
 
   const muzzle = new THREE.Object3D();
   muzzle.position.set(0, 0.012, -0.97);
@@ -43,14 +57,24 @@ function buildRifle() {
   return group;
 }
 
-// A pistol: slide, frame, and one hand wrapping the grip.
+// A pistol: slide, frame, and one hand wrapping the grip. Scaled up relative to the
+// rifle because it is shorter: at the same root scale it sat too small and too low to
+// read, and the start screen (which draws the pistol) showed no weapon at all.
 function buildPistol() {
   const group = new THREE.Group();
   group.add(box(0.052, 0.062, 0.25, STEEL, 0, 0.01, -0.15));
   group.add(box(0.05, 0.1, 0.075, POLYMER, 0, -0.07, -0.01, 0.16));
   group.add(box(0.02, 0.02, 0.05, STEEL, 0, 0.022, -0.29));
+  // Right hand on the grip, with a cuff and a sleeve that reaches the frame edge.
   group.add(box(0.078, 0.1, 0.1, GLOVE, 0.005, -0.08, -0.01, 0.16));
   group.add(box(0.03, 0.045, 0.075, GLOVE, 0.04, -0.055, -0.02));
+  group.add(box(0.082, 0.075, 0.06, CUFF, 0.006, -0.095, 0.06));
+  group.add(box(0.095, 0.085, 0.2, SLEEVE, 0.012, -0.11, 0.17, 0.08));
+  // Left hand cupping the grip from the other side.
+  group.add(box(0.06, 0.085, 0.09, GLOVE, -0.045, -0.085, -0.015, 0.16));
+  group.add(box(0.07, 0.07, 0.06, CUFF, -0.05, -0.1, 0.05));
+  group.add(box(0.085, 0.08, 0.17, SLEEVE, -0.06, -0.115, 0.15, 0.08));
+  group.scale.setScalar(1.18);
   const muzzle = new THREE.Object3D();
   muzzle.position.set(0, 0.02, -0.32);
   group.add(muzzle);
@@ -99,9 +123,14 @@ export function createViewmodel() {
   scene.add(fill);
 
   const root = new THREE.Group();
-  root.scale.setScalar(0.7);
-  root.position.set(0.3, -0.3, -0.72);
-  root.rotation.set(0.03, 0.2, 0);
+  // The rifle sits low-right and reads as held. These numbers are measured, not
+  // guessed: the model's projected bounding box lands at x 739-1067, y 406-654 in a
+  // 1280x720 frame, so the receiver, the hands and the muzzle are all inside the
+  // viewport. The first anchor (-0.3 y, -0.72 z) dropped the whole model below the
+  // bottom edge at 720p and the weapon never showed.
+  root.scale.setScalar(0.52);
+  root.position.set(0.3, -0.14, -0.64);
+  root.rotation.set(0.02, 0.16, 0);
   scene.add(root);
 
   const models = {
@@ -200,12 +229,12 @@ export function createViewmodel() {
 
       root.position.set(
         0.3 + bobX + state.swayX * 0.012,
-        -0.3 - bobY + state.swayY * 0.012 - reloadDip * 0.2,
-        -0.72 + state.kick * 0.03,
+        -0.14 - bobY + state.swayY * 0.012 - reloadDip * 0.2,
+        -0.64 + state.kick * 0.03,
       );
       root.rotation.set(
-        0.03 - state.kickRot * 0.45 + state.swayY * 0.03 - reloadDip * 1.2,
-        0.2 - bobX * 1.2 + state.swayX * 0.25,
+        0.02 - state.kickRot * 0.45 + state.swayY * 0.03 - reloadDip * 1.2,
+        0.16 - bobX * 1.2 + state.swayX * 0.25,
         -state.kickRot * 0.16,
       );
 

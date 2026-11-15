@@ -860,18 +860,15 @@ function setupShot(kind) {
   player.smokes = 0;
 
   if (kind === 'start') {
+    // The cover shot: the deploy scene and HUD without the centred title modal. A modal
+    // there covers the weapon and the corridor's focal point, which is what a cover has
+    // to show; the wordmark belongs in a corner, not over the frame.
     player.pos.set(-3.6, 0, 14.8);
     player.yaw = -0.04;
     player.pitch = -0.02;
-    hud.showScreen({
-      eyebrow: 'Three.js tactical FPS',
-      title: 'Ashfall',
-      body: 'A water-treatment plant at dusk. Two sites, three lanes, one charge. Attackers plant, defenders hold, money buys the next round.',
-      action: 'Deploy',
-      fine: 'Single player against bots. Built with three.js 0.187.0, no build step, no network.',
-      controls: true,
-      tone: 'default',
-    });
+    hud.hideScreen();
+    hud.setScore(0, 0, 1);
+    hud.setMoney(player.money);
   }
 
   if (kind === 'buy') {
