@@ -1,32 +1,53 @@
-// A working threejs-fps-01 entry (Node 22, standard library only): the game is this directory's
-// game/ folder, plain static files the browser loads as ES modules with three.js from an import
-// map, and the program hands it in. It copies game/ and screenshots/ from beside this file to
-// /output and writes /output/dossier.json, the summary the judge reads, with the vendored make.fun
-// library. A starting point, not a winner: a grey room, one rifle and four targets that drop when
-// shot. Build your game, put your PNG or JPEG screenshots in screenshots/ (the first by name is
-// the cover) and run it.
+// Ashfall — the entry program for make.fun's three.js tactical FPS bounty.
 //
-// Serve it locally with `node serve.ts`, then open http://localhost:8080.
-// Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
+// The game itself is game/: plain static files the browser loads as ES modules, with
+// three.js 0.187.0 vendored beside them and mapped by index.html's import map. Nothing
+// under game/ fetches anything at runtime; there is no build step and no package install.
+//
+// This program does the two things the bounty asks of an entrypoint:
+//   1. copy game/ and screenshots/ to the output directory, so the hand-in is exactly the
+//      files that were played in the browser;
+//   2. write dossier.json, the summary the judge reads, with the kit's buildDossier.
+//
+// The grader mounts the repository read-only at /bot and gives a writable /output. Run
+// the same program by hand with MAKEFUN_OUTPUT_DIR standing in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-threejs.ts';
 
-const here = fileURLToPath(new URL('.', import.meta.url));
+const root = fileURLToPath(new URL('.', import.meta.url));
 const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
 mkdirSync(out, { recursive: true });
-cpSync(join(here, 'game'), join(out, 'game'), { recursive: true });
-mkdirSync(join(out, 'screenshots'), { recursive: true });
-if (existsSync(join(here, 'screenshots'))) cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
 
-// The scorer's own caps (reference/gate.json): only text_max_bytes shapes the bytes; the others refuse an entry the
-// scorer would refuse (more than 4 screenshots or one over 256 KiB; more than 993 files in game/ or 48 MiB of game
-// files, in all: game/ counts beside /output's own 1000-entry cap, its screenshots/ and dossier.json).
+// The game first: it is the whole entry, and the judge's Game block is read from it. The
+// copy is replaced rather than merged, so a stale file from an earlier run cannot slip in.
+const gameDir = join(out, 'game');
+rmSync(gameDir, { recursive: true, force: true });
+cpSync(join(root, 'game'), gameDir, { recursive: true });
+
+// Then the screenshots. They are real renders of game/index.html in Chrome, captured by
+// tools/capture.mjs; they are replaced too, so the cover is always the current game.
+const shotDir = join(out, 'screenshots');
+rmSync(shotDir, { recursive: true, force: true });
+mkdirSync(shotDir, { recursive: true });
+if (existsSync(join(root, 'screenshots'))) {
+  cpSync(join(root, 'screenshots'), shotDir, { recursive: true });
+}
+
+// These limits are the scorer's own (gate.json): the dossier text is cut at 160 KiB, and
+// an entry is refused above four screenshots, 256 KiB each, 993 files in game/, or 48 MiB
+// of game files in all. Keeping buildDossier's numbers in step with them means the file
+// written here is the file the gate rebuilds and compares byte for byte.
 writeFileSync(
   join(out, 'dossier.json'),
-  buildDossier(out, { text_max_bytes: 163840, screenshots: { max: 4, max_bytes: 262144 }, game_max_files: 993, game_max_bytes: 50331648 }),
+  buildDossier(out, {
+    text_max_bytes: 163840,
+    screenshots: { max: 4, max_bytes: 262144 },
+    game_max_files: 993,
+    game_max_bytes: 50331648,
+  }),
 );
