@@ -1,4 +1,4 @@
-// Capture the screenshots the judge sees, from the real page, in headless Chrome.
+// Capture the screenshots the judge sees, from the real page, in headless Chromium.
 // No dependencies: it talks to Chrome's DevTools protocol over the WebSocket that
 // Node 22+ ships with. Usage:
 //
@@ -7,8 +7,14 @@
 //
 // It also forwards page console errors, so a broken module fails loudly here instead
 // of silently producing a black frame.
+//
+// Ported from the macOS build: the Chrome path, the WebGL backend and the shot quality
+// are read from the environment so the same script renders on a headless Linux box
+// (SwiftShader) and on a Mac (real GPU). Screenshots are taken at the platform's
+// ceiling, 1280x720, JPEG quality 97, so the dossier carries as much image as the
+// gate allows.
 import { spawn } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -16,10 +22,50 @@ const here = fileURLToPath(new URL('..', import.meta.url));
 const shots = JSON.parse(readFileSync(join(here, 'shots.json'), 'utf8'));
 const args = process.argv.slice(2);
 const only = args.includes('--only') ? args[args.indexOf('--only') + 1] : null;
-const port = 9333;
+const port = Number(process.env.ASHFALL_CDP_PORT ?? 9333);
 const origin = process.env.ASHFALL_ORIGIN ?? 'http://127.0.0.1:8080';
-const profile = '/tmp/ashfall-capture-profile';
-const chrome = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const profile = process.env.ASHFALL_PROFILE ?? '/tmp/ashfall-capture-profile';
+const quality = Number(process.env.ASHFALL_JPEG_QUALITY ?? 97);
+const width = Number(process.env.ASHFALL_WIDTH ?? 1280);
+const height = Number(process.env.ASHFALL_HEIGHT ?? 720);
+
+// Chrome lives in a different place on every machine; ASHFALL_CHROME wins, then the
+// two layouts this repository has actually been rendered on.
+const CANDIDATES = [
+  process.env.ASHFALL_CHROME,
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/root/.hermes/tools/chromium-1208/chrome-linux64/chrome',
+  '/usr/bin/chromium',
+  '/usr/bin/chromium-browser',
+  '/usr/bin/google-chrome',
+].filter(Boolean);
+
+function findChrome() {
+  for (const candidate of CANDIDATES) {
+    try {
+      statSync(candidate);
+      return candidate;
+    } catch {
+      // Not this one.
+    }
+  }
+  throw new Error(`no Chrome binary found; tried:\n  ${CANDIDATES.join('\n  ')}`);
+}
+
+const chrome = findChrome();
+
+// Headless Linux has no GPU, so WebGL runs on SwiftShader: these flags turn it on
+// rather than letting the page fall back to a black canvas.
+const GPU_FLAGS = process.platform === 'linux'
+  ? [
+    '--no-sandbox',
+    '--disable-dev-shm-usage',
+    '--enable-unsafe-swiftshader',
+    '--use-gl=angle',
+    '--use-angle=swiftshader',
+    '--disable-gpu-sandbox',
+  ]
+  : ['--enable-unsafe-swiftshader'];
 
 rmSync(profile, { recursive: true, force: true });
 mkdirSync(join(here, 'screenshots'), { recursive: true });
@@ -32,14 +78,14 @@ const child = spawn(chrome, [
   '--mute-audio',
   '--no-first-run',
   '--no-default-browser-check',
-  '--window-size=1280,720',
+  `--window-size=${width},${height}`,
   '--force-device-scale-factor=1',
-  '--enable-unsafe-swiftshader',
+  ...GPU_FLAGS,
   'about:blank',
 ], { stdio: 'ignore' });
 
 async function waitForDevtools() {
-  for (let i = 0; i < 120; i += 1) {
+  for (let i = 0; i < 160; i += 1) {
     try {
       const response = await fetch(`http://127.0.0.1:${port}/json/list`);
       const targets = await response.json();
@@ -115,11 +161,24 @@ async function main() {
   await cdp.send('Page.enable');
   await cdp.send('Runtime.enable');
   await cdp.send('Emulation.setDeviceMetricsOverride', {
-    width: 1280,
-    height: 720,
+    width,
+    height,
     deviceScaleFactor: 1,
     mobile: false,
   });
+
+  // Prove the page really rasterises before trusting any frame: a silent SwiftShader
+  // failure renders a black canvas and every screenshot would be worthless.
+  const probe = await cdp.send('Runtime.evaluate', {
+    expression: `(() => {
+      const c = document.createElement('canvas');
+      const gl = c.getContext('webgl2') || c.getContext('webgl');
+      if (!gl) return 'NO-WEBGL';
+      return gl.getParameter(gl.VERSION) + ' | ' + gl.getParameter(gl.RENDERER);
+    })()`,
+    returnByValue: true,
+  });
+  console.log(`webgl: ${probe.result.value}`);
 
   let failures = 0;
   for (const shot of shots) {
@@ -127,13 +186,13 @@ async function main() {
     const url = `${origin}/index.html${shot.query}`;
     await cdp.send('Page.navigate', { url });
     let ready = false;
-    for (let i = 0; i < 160; i += 1) {
+    for (let i = 0; i < 240; i += 1) {
       await sleep(100);
-      const probe = await cdp.send('Runtime.evaluate', {
+      const check = await cdp.send('Runtime.evaluate', {
         expression: 'Boolean(window.__shotReady)',
         returnByValue: true,
       });
-      if (probe.result.value) {
+      if (check.result.value) {
         ready = true;
         break;
       }
@@ -149,8 +208,8 @@ async function main() {
       continue;
     }
     // One extra frame so the compositor has the finished canvas.
-    await sleep(250);
-    const capture = await cdp.send('Page.captureScreenshot', { format: 'jpeg', quality: 88 });
+    await sleep(400);
+    const capture = await cdp.send('Page.captureScreenshot', { format: 'jpeg', quality });
     const bytes = Buffer.from(capture.data, 'base64');
     writeFileSync(join(here, 'screenshots', shot.name), bytes);
     console.log(`[${shot.name}] ${(bytes.length / 1024).toFixed(0)} KiB  ${url}`);

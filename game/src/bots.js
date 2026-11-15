@@ -86,17 +86,26 @@ function eyeOf(entity, out) {
 }
 
 // A cone plus a line of sight, so cover is real and a bot never shoots through a wall.
-function canSee(bot, other, colliders) {
+// Smoke shortens the sightline instead of blocking it outright: a defender still sees a
+// silhouette at the edge of the cloud, which is what makes smoke a tactic and not a wall.
+function canSee(bot, other, colliders, smoke) {
   const eye = _to.set(bot.pos.x, bot.pos.y + 1.58, bot.pos.z);
   const dx = other.pos.x - eye.x;
   const dz = other.pos.z - eye.z;
   const dist = Math.hypot(dx, dz);
-  if (dist > BOT.viewRange || dist < 0.2) return false;
+  if (dist < 0.2) return false;
   const want = Math.atan2(-dx, -dz);
   let delta = Math.atan2(Math.sin(want - bot.yaw), Math.cos(want - bot.yaw));
   if (Math.abs(delta) > (BOT.fovDeg * Math.PI) / 360) return false;
   const target = new THREE.Vector3(other.pos.x, other.pos.y + 1.1, other.pos.z);
-  return !losBlocked(eye, target, colliders);
+  if (losBlocked(eye, target, colliders)) return false;
+  let range = BOT.viewRange;
+  if (smoke) {
+    // Haze eats the far end of the lane: the denser the cloud, the shorter the sight.
+    const haze = smoke.opacityBetween(eye, target);
+    if (haze > 0.02) range *= Math.max(0.06, 1 - haze * 1.15);
+  }
+  return dist <= range;
 }
 
 function turnToward(bot, point, dt) {
@@ -172,7 +181,7 @@ function strafeStep(bot, dt, colliders, speed) {
 
 export function updateBot(bot, dt, ctx) {
   if (!bot.alive) return;
-  const { colliders, combatants, now, phase, fire, plant, defuse, bomb } = ctx;
+  const { colliders, combatants, now, phase, fire, plant, defuse, bomb, smoke } = ctx;
   bot.strafeUntil -= dt;
 
   if (phase !== 'live') {
@@ -184,7 +193,7 @@ export function updateBot(bot, dt, ctx) {
   let seen = null;
   let seenDist = Infinity;
   for (const other of enemyOf(bot, combatants)) {
-    if (!canSee(bot, other, colliders)) continue;
+    if (!canSee(bot, other, colliders, smoke)) continue;
     const dist = bot.pos.distanceTo(other.pos);
     if (dist < seenDist) {
       seen = other;

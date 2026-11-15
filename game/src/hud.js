@@ -24,6 +24,7 @@ export function createHud() {
     health: $('health'),
     armour: $('armour'),
     frags: $('frags'),
+    smoke: $('smoke'),
     money: $('money'),
     ammo: $('ammo'),
     weaponName: $('weapon-name'),
@@ -111,6 +112,12 @@ export function createHud() {
 
     setFrags(count) {
       el.frags.textContent = count > 0 ? `FRAG ×${count}` : 'NO FRAG';
+    },
+
+    // Smoke shares the slot-4 chip: a player who bought one needs to see it without
+    // opening a menu, and it is the only cue that the canister is still on the belt.
+    setSmoke(count) {
+      el.smoke.textContent = count > 0 ? `SMOKE ×${count}` : 'NO SMOKE';
     },
 
     setMoney(money) {

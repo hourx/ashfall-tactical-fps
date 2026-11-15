@@ -31,6 +31,7 @@ export function createPlayer(spawn) {
     primary: null,
     secondary: 'wren',
     grenades: 0,
+    smokes: 0,
     current: 'wren',
     ammo: { wren: { mag: 15, reserve: 60 }, cinder: { mag: 0, reserve: 0 }, vantage: { mag: 0, reserve: 0 }, ember: { mag: 1, reserve: 0 } },
     recoil: { x: 0, y: 0 },

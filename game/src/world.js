@@ -271,10 +271,12 @@ export const SPAWNS = {
     { x: -1.0, z: 17.0, yaw: 0 },
     { x: 1.2, z: 16.4, yaw: 0 },
     { x: 2.4, z: 17.2, yaw: 0 },
+    { x: 0.0, z: 18.0, yaw: 0 },
   ],
   defend: [
     { x: -15.0, z: -13.4, yaw: Math.PI },
     { x: -12.2, z: -14.6, yaw: Math.PI },
+    { x: 0.0, z: -15.2, yaw: Math.PI },
     { x: 12.2, z: -14.6, yaw: Math.PI },
     { x: 15.0, z: -13.4, yaw: Math.PI },
   ],

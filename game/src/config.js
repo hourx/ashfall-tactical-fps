@@ -60,6 +60,12 @@ export const WEAPONS = [
     spreadStand: 0, spreadMove: 0, spreadCrouch: 0, recoil: 0, range: 0,
     fuse: 1.7, blastRadius: 5.4, throwSpeed: 16,
   },
+  {
+    id: 'veil', name: 'Veil smoke', slot: 4, price: 300, kind: 'smoke',
+    damage: 0, headMul: 1, rpm: 60, mag: 1, reserve: 0, reload: 0,
+    spreadStand: 0, spreadMove: 0, spreadCrouch: 0, recoil: 0, range: 0,
+    fuse: 1.35, blastRadius: 0, throwSpeed: 15,
+  },
 ];
 
 export const WEAPON_BY_ID = Object.fromEntries(WEAPONS.map((w) => [w.id, w]));
@@ -87,9 +93,10 @@ export const ROUND = {
 };
 
 export const BOT = {
-  // The player is the third attacker: two bot teammates, three defenders.
-  attackCount: 2,
-  defendCount: 3,
+  // Five a side, Counter-Strike style: the player is one of five attackers, so four
+  // bot teammates push with the player and five defenders hold the sites.
+  attackCount: 4,
+  defendCount: 5,
   health: 100,
   fovDeg: 112,
   viewRange: 52,

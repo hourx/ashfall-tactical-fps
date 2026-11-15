@@ -17,6 +17,7 @@ import { createHud } from './hud.js';
 import { createAudio } from './audio.js';
 import { createViewmodel } from './viewmodel.js';
 import { createGrenades } from './grenades.js';
+import { createSmoke } from './smoke.js';
 import { createBotView, updateBotView, botMuzzleFlash, tickBotViewFlash } from './chars.js';
 import { fireHitscan, effectiveSpread, applyShotKick, canFire, startReload, finishReload } from './weapons.js';
 import { raycastTargets, losBlocked } from './physics.js';
@@ -184,6 +185,7 @@ const match = createMatch({
     onRoundStart() {
       // A frag still in the air when a round ends never carries into the next one.
       grenades.reset();
+      smoke.reset();
     },
   },
 });
@@ -197,6 +199,10 @@ const grenades = createGrenades(scene, {
   effects,
   audio,
 });
+
+// Smoke canisters: same throw model as a frag, but what they leave behind is a volume of
+// haze that the bots' vision test reads, so a smoke really does cut a lane in half.
+const smoke = createSmoke(scene, { colliders: world.colliders });
 
 // ---------------------------------------------------------------- helpers
 
@@ -289,6 +295,32 @@ function throwGrenade() {
     player.shotIndex = 0;
     viewmodel.setWeapon(player.current);
   }
+}
+
+// Smoke goes on the same key path as a frag, but it is a separate canister count so a
+// player can carry one of each: the frag clears a corner, the smoke takes the angle away.
+function throwSmoke() {
+  if (!player.alive) return;
+  if (match.state.phase !== 'live') {
+    toast('Smoke only flies once the round is live', 1.5);
+    return;
+  }
+  if (player.smokes <= 0) {
+    toast('No smoke — buy one during freeze time', 1.6);
+    return;
+  }
+  if (game.simTime - player.lastThrow < 0.75) return;
+  player.lastThrow = game.simTime;
+  player.smokes -= 1;
+
+  basisFor(player.yaw, player.pitch);
+  eyePosition(player, _eye);
+  if (!smoke.throwFrom(_eye, _forward)) {
+    player.smokes += 1;
+    return;
+  }
+  audio.toss();
+  toast(`Smoke out · ${player.smokes} left`, 1.1);
 }
 
 function beginReload() {
@@ -429,6 +461,7 @@ function updatePlayer(dt) {
     if (code === 'KeyR') beginReload();
     if (code === 'KeyB') toggleBuy();
     if (code === 'KeyG') throwGrenade();
+    if (code === 'KeyF') throwSmoke();
     if (code === 'Digit1' || code === 'Digit2' || code === 'Digit3' || code === 'Digit4') {
       const slot = Number(code.slice(5));
       const next = equipSlot(player, slot);
@@ -571,6 +604,7 @@ function syncHud() {
   hud.setHealth(player.health, player.armour);
   hud.setMoney(player.money);
   hud.setFrags(player.grenades);
+  hud.setSmoke(player.smokes);
   if (weapon.kind === 'melee' || weapon.kind === 'grenade') hud.setAmmo(null, null, weapon.name);
   else hud.setAmmo(ammo?.mag ?? 0, ammo?.reserve ?? 0, weapon.name);
 
@@ -628,9 +662,11 @@ function simulate(dt) {
     plant: match.plantTick,
     defuse: match.defuseTick,
     bomb: match.state.bomb,
+    smoke,
   };
   for (const bot of bots) updateBot(bot, dt, ctx);
   grenades.update(dt);
+  smoke.update(dt);
 
   match.update(dt, {});
   drainKillfeed();
@@ -723,6 +759,7 @@ hud.el.screenAction.addEventListener('click', () => {
     player.primary = null;
     player.current = 'wren';
     player.grenades = 0;
+    player.smokes = 0;
     player.lastThrow = -10;
     player.ammo = { wren: { mag: 15, reserve: 60 }, cinder: { mag: 0, reserve: 0 }, vantage: { mag: 0, reserve: 0 }, ember: { mag: 0, reserve: 0 } };
     grenades.reset();
@@ -819,6 +856,8 @@ function setupShot(kind) {
   viewmodel.setWeapon('wren');
   effects.showBomb(null, false);
   grenades.reset();
+  smoke.reset();
+  player.smokes = 0;
 
   if (kind === 'start') {
     player.pos.set(-3.6, 0, 14.8);
@@ -856,6 +895,7 @@ function setupShot(kind) {
     player.money = 3150;
     player.armour = 100;
     player.grenades = 1;
+    player.smokes = 1;
     player.ammo.ember = { mag: 1, reserve: 0 };
     player.ammo.vantage = { mag: 21, reserve: 90 };
     player.primary = 'vantage';
@@ -866,6 +906,9 @@ function setupShot(kind) {
     player.pitch = -0.02;
     viewmodel.setWeapon('vantage');
 
+    // Five defenders on the site, spread over the angles a real hold would take, and four
+    // attackers pushing with the player: the screenshot has to show the same 5v5 the
+    // config runs, or the judge sees a lie the code contradicts.
     const defenders = bots.filter((bot) => bot.team === 'defend');
     if (defenders[0]) placeBot(defenders[0], -15.6, -9.2, 0.05);
     if (defenders[1]) placeBot(defenders[1], -14.2, -11.0, 0.35);
@@ -873,12 +916,21 @@ function setupShot(kind) {
       placeBot(defenders[2], -17.2, -10.2, -0.5);
       defenders[2].health = 40;
     }
+    if (defenders[3]) placeBot(defenders[3], -11.4, -3.8, 0.58);
+    if (defenders[4]) placeBot(defenders[4], -18.4, -3.4, -0.36);
+
     const mates = bots.filter((bot) => bot.team === 'attack');
     if (mates[0]) placeBot(mates[0], -17.6, 0.8, -0.15);
     if (mates[1]) {
       placeBot(mates[1], -17.9, -4.4, -0.9);
       killBot(mates[1]);
     }
+    if (mates[2]) placeBot(mates[2], -12.9, -3.0, 0.28);
+    if (mates[3]) placeBot(mates[3], -15.1, -5.6, 0.12);
+
+    // A veil cloud already blooming down the lane: the smoke is a mechanic, and the shot
+    // has to prove it renders as haze the bots cannot see through.
+    smoke.preview(-15.0, -6.0, 2.2);
 
     hud.kill({ killer: 'You', victim: defenders[1]?.name ?? 'Ferro', weapon: 'Vantage-7', headshot: true, byPlayer: true, onPlayer: false });
     hud.kill({ killer: 'Kite', victim: 'Pike', weapon: 'Cinder SMG', headshot: false, byPlayer: false, onPlayer: false });

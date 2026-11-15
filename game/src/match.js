@@ -333,6 +333,7 @@ export function createMatch({ player, bots, hooks }) {
     { id: 'cinder', label: 'Cinder SMG', price: 1250, detail: 'CLOSE RANGE · 800 RPM · 30 ROUNDS' },
     { id: 'vantage', label: 'Vantage-7 rifle', price: 2700, detail: 'RIFLE · 34 DMG · 600 RPM · 30 ROUNDS' },
     { id: 'ember', label: 'Ember frag', price: 300, detail: 'THROWN · 1.7 S FUSE · 96 MAX DMG' },
+    { id: 'veil', label: 'Veil smoke', price: 300, detail: 'THROWN · 9 S CLOUD · CUTS A LANE' },
     { id: 'armour', label: 'Plate carrier', price: ROUND.armourPrice, detail: 'SOAKS HALF OF EVERY HIT UNTIL IT BREAKS' },
   ];
 
@@ -357,6 +358,12 @@ export function createMatch({ player, bots, hooks }) {
       player.money -= item.price;
       player.grenades += 1;
       player.ammo.ember = { mag: player.grenades, reserve: 0 };
+      return { ok: true };
+    }
+    if (id === 'veil') {
+      if (player.smokes >= 2) return { ok: false, why: 'Two smokes is the limit' };
+      player.money -= item.price;
+      player.smokes += 1;
       return { ok: true };
     }
     const weapon = WEAPON_BY_ID[id];
